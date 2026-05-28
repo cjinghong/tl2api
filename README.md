@@ -44,6 +44,21 @@ curl "http://localhost:3000/tweets?count=50&filterAds=false"
 
 Other endpoints: `GET /health`, `GET /` (usage hint).
 
+## Use as an MCP server (for agents)
+
+Coding agents can consume tl2api as an [MCP](https://modelcontextprotocol.io) server exposing a `get_timeline` tool, instead of the HTTP API. It reuses the same warm browser and the same saved session.
+
+```bash
+claude mcp add tl2api -- node "$(pwd)/src/mcp.js"   # Claude Code
+# or run directly: npm run mcp
+```
+
+For other clients (Cursor, Cline, Claude Desktop), point `command: node`, `args: ["<abs>/src/mcp.js"]`. Configure with `node` directly, **not** `npm run` (its banner corrupts the stdio protocol).
+
+> The MCP server and HTTP server lock the same `browser-data/` profile — run **one at a time**.
+
+Full agent setup instructions: [`docs/agent-install.html`](docs/agent-install.html) / [`docs/agent-install.md`](docs/agent-install.md).
+
 ## Response shape
 
 ```jsonc
