@@ -11,16 +11,29 @@ Local API that retrieves your X (Twitter) home timeline **without the X API**. I
 
 ## Setup
 
+Install from npm — gives you the `tl2api`, `tl2api-login`, and `tl2api-mcp` commands:
+
 ```bash
-npm install
-npx playwright install chrome   # uses your installed Google Chrome
-npm run login                   # one-time: log in, then press ENTER in the terminal
-npm start                       # serves on http://localhost:3000
+npm i -g tl2api
+tl2api-login    # one-time: log into X in the browser, then press ENTER
+tl2api          # serves http://localhost:3000
 ```
+
+Requires Google Chrome installed. The session is stored in `~/.tl2api/browser-data` (override with `TL2API_DATA_DIR`).
 
 > Log in directly with username/email + password. Avoid "Sign in with Google" — Google blocks automated browsers.
 
-To watch the browser work (debugging), start headful: `HEADLESS=false npm start`.
+To watch the browser work (debugging), start headful: `HEADLESS=false tl2api`.
+
+**From source (dev):**
+
+```bash
+git clone https://github.com/cjinghong/tl2api.git && cd tl2api
+npm install
+npx playwright install chrome
+npm run login
+npm start
+```
 
 ## Usage
 
@@ -49,13 +62,12 @@ Other endpoints: `GET /health`, `GET /` (usage hint).
 Coding agents can consume tl2api as an [MCP](https://modelcontextprotocol.io) server exposing a `get_timeline` tool, instead of the HTTP API. It reuses the same warm browser and the same saved session.
 
 ```bash
-claude mcp add tl2api -- node "$(pwd)/src/mcp.js"   # Claude Code
-# or run directly: npm run mcp
+claude mcp add tl2api -- tl2api-mcp   # Claude Code (after npm i -g tl2api)
 ```
 
-For other clients (Cursor, Cline, Claude Desktop), point `command: node`, `args: ["<abs>/src/mcp.js"]`. Configure with `node` directly, **not** `npm run` (its banner corrupts the stdio protocol).
+For other clients (Cursor, Cline, Claude Desktop), set `command: "tl2api-mcp"`. Install globally first so the first connection is fast — an `npx` first-run downloads Playwright and may time out the client.
 
-> The MCP server and HTTP server lock the same `browser-data/` profile — run **one at a time**.
+> The MCP server and HTTP server lock the same `~/.tl2api/browser-data` profile — run **one at a time**.
 
 Full agent setup instructions: [`docs/agent-install.html`](docs/agent-install.html) / [`docs/agent-install.md`](docs/agent-install.md).
 
@@ -99,6 +111,6 @@ Numbers like `1.2K` / `3.4M` are parsed to integers. Promoted tweets have no tim
 ## Notes
 
 - Single-process: one scrape runs at a time (concurrent requests get `429`).
-- `401` means the session expired — re-run `npm run login`.
-- `browser-data/` holds your live X session — it is gitignored. **Never commit or share it.**
+- `401` means the session expired — re-run `tl2api-login`.
+- `~/.tl2api/browser-data` holds your live X session (override with `TL2API_DATA_DIR`). **Never commit or share it.**
 - This automates your own logged-in browser. Use it for personal data access and respect X's Terms of Service.
