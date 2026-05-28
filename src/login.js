@@ -1,11 +1,9 @@
+#!/usr/bin/env node
 import { chromium } from 'playwright';
 import readline from 'node:readline';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { DATA_DIR, ensureDataDir } from './data-dir.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.resolve(__dirname, '..', 'browser-data');
-
+ensureDataDir();
 const context = await chromium.launchPersistentContext(DATA_DIR, {
   headless: false,
   channel: 'chrome',

@@ -1,8 +1,44 @@
 {
   "name": "tl2api",
   "version": "0.1.0",
+  "description": "Local API + MCP server that returns your X (Twitter) home timeline as JSON by driving a real logged-in browser — no X API key.",
   "type": "module",
-  "private": true,
+  "license": "MIT",
+  "author": "cjinghong",
+  "homepage": "https://github.com/cjinghong/tl2api#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cjinghong/tl2api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cjinghong/tl2api/issues"
+  },
+  "keywords": [
+    "x",
+    "twitter",
+    "timeline",
+    "scraper",
+    "playwright",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "json",
+    "no-api"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "tl2api": "src/server.js",
+    "tl2api-login": "src/login.js",
+    "tl2api-mcp": "src/mcp.js"
+  },
+  "files": [
+    "src",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node src/server.js",
     "login": "node src/login.js",

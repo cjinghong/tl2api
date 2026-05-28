@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import express from 'express';
 import { scrapeTimeline } from './scraper.js';
 import { getFreshTimeline, armIdleTimer, shutdown } from './browser.js';

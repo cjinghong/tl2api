@@ -1,9 +1,5 @@
 import { chromium } from 'playwright';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const USER_DATA_DIR = path.resolve(__dirname, '..', 'browser-data');
+import { DATA_DIR, ensureDataDir } from './data-dir.js';
 
 const IDLE_MS = 30 * 60 * 1000;
 
@@ -17,7 +13,8 @@ let page = null;
 let idleTimer = null;
 
 async function launch() {
-  const ctx = await chromium.launchPersistentContext(USER_DATA_DIR, {
+  ensureDataDir();
+  const ctx = await chromium.launchPersistentContext(DATA_DIR, {
     headless: HEADLESS,
     channel: 'chrome',
     viewport: { width: 1280, height: 900 },
