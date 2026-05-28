@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tl2api — install as an agent tool</title>
+<meta name="description" content="Install tl2api (local X/Twitter home-timeline-to-JSON tool) as an MCP server or HTTP API for use by a coding agent.">
+</head>
+<body>
+
+<h1>tl2api — install as an agent tool</h1>
+
+<p><code>tl2api</code> returns the <strong>X (Twitter) home timeline</strong> of a logged-in user as structured JSON, by driving a real logged-in Chrome session via Playwright. No X API key, no developer account.</p>
+
+<p>It can be consumed two ways:</p>
+<ul>
+  <li><strong>MCP server</strong> (recommended for coding agents) — exposes a <code>get_timeline</code> tool.</li>
+  <li><strong>HTTP API</strong> (universal fallback) — <code>GET /tweets</code> for any agent that can run a shell / <code>curl</code>.</li>
+</ul>
+
+<p>This document is written for an autonomous coding agent setting the tool up for its own use.</p>
+
+<hr>
+
+<h2>READ FIRST: one unavoidable human step</h2>
+
+<p>This tool reads tweets from a <strong>human's logged-in X account</strong>. An agent <strong>cannot</strong> complete the login autonomously — it needs a person to enter credentials and pass 2FA, and automating that risks account lockout.</p>
+
+<p>So the split is:</p>
+<ul>
+  <li><strong>The agent</strong> does all the mechanical setup (clone, install, configure).</li>
+  <li><strong>A human</strong> runs <code>npm run login</code> <strong>exactly once</strong> — a Chrome window opens, they log into X, then press ENTER. The session is saved to <code>browser-data/</code>.</li>
+</ul>
+
+<p>Both the MCP server and the HTTP API read that same saved session. Login is done once and is independent of which form factor you use.</p>
+
+<p>If no valid session exists, <code>get_timeline</code> (or <code>GET /tweets</code>) returns a <strong>"Not logged in"</strong> error. When you see it, ask the human to run <code>npm run login</code>.</p>
+
+<hr>
+
+<h2>Prerequisites</h2>
+<ul>
+  <li><strong>Node.js 18+</strong> (the project is ESM).</li>
+  <li><strong>Google Chrome</strong> installed (Playwright drives your real Chrome).</li>
+  <li>A <strong>human</strong> available for the one-time login.</li>
+</ul>
+
+<hr>
+
+<h2>Install</h2>
+<pre><code>git clone https://github.com/cjinghong/tl2api.git tl-2-api
+cd tl-2-api
+npm install
+npx playwright install chrome</code></pre>
+
+<h2>One-time login (human runs this)</h2>
+<pre><code>npm run login</code></pre>
+<p>A Chrome window opens. The human:</p>
+<ol>
+  <li>Logs into X with <strong>username/email + password</strong> (avoid "Sign in with Google" — Google blocks automated browsers).</li>
+  <li>Waits until the home timeline at <code>x.com/home</code> is visible.</li>
+  <li>Presses <strong>ENTER</strong> in the terminal to save the session and close.</li>
+</ol>
+<p>The session is written to <code>browser-data/</code> (gitignored — never commit or share it).</p>
+
+<hr>
+
+<h2>Option A (recommended): MCP server</h2>
+
+<p>The MCP server exposes a single tool, <strong><code>get_timeline</code></strong>, over stdio.</p>
+
+<blockquote>
+<p>Configure your client to launch it with an <strong>absolute path</strong>, calling <strong><code>node</code> directly</strong> — do <strong>not</strong> wrap it in <code>npm run</code>, whose startup banner is printed to stdout and corrupts the stdio JSON-RPC channel.</p>
+</blockquote>
+
+<p>Replace <code>/absolute/path/to/tl-2-api</code> with the real clone path (run <code>pwd</code> in the repo).</p>
+
+<h3>Claude Code</h3>
+<pre><code>claude mcp add tl2api -- node /absolute/path/to/tl-2-api/src/mcp.js</code></pre>
+
+<h3>Cursor / Cline / Claude Desktop (and other mcpServers clients)</h3>
+<pre><code>{
+  "mcpServers": {
+    "tl2api": {
+      "command": "node",
+      "args": ["/absolute/path/to/tl-2-api/src/mcp.js"],
+      "env": { "HEADLESS": "true" }
+    }
+  }
+}</code></pre>
+
+<h3>Tool: get_timeline</h3>
+<table>
+  <thead>
+    <tr><th>Argument</th><th>Type</th><th>Default</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>count</code></td><td>integer</td><td><code>20</code></td><td>1–200. How many tweets to return.</td></tr>
+    <tr><td><code>filterAds</code></td><td>boolean</td><td><code>true</code></td><td>Strip promoted/ad tweets.</td></tr>
+  </tbody>
+</table>
+<p>Returns a JSON text block: <code>{ count, requestedCount, filterAds, tweets: [ ... ] }</code>. See <a href="#response-shape">Response shape</a> below.</p>
+<p>If the session is missing or expired, the tool result has <code>isError: true</code> and text telling the human to run <code>npm run login</code>.</p>
+
+<hr>
+
+<h2>Option B (fallback): HTTP API</h2>
+
+<p>For agents without MCP support. Start the server, then make HTTP requests.</p>
+<pre><code>npm start    # serves http://localhost:3000   (use: HEADLESS=false npm start  to watch the browser)</code></pre>
+<pre><code>curl "http://localhost:3000/tweets?count=20&amp;filterAds=true"</code></pre>
+<p>Query params: <code>count</code> (1–200, default 20), <code>filterAds</code> (boolean, default true). Other endpoints: <code>GET /health</code>, <code>GET /</code>.</p>
+<p><code>HEADLESS</code> is a <strong>startup</strong> setting (env var, default <code>true</code>), not a per-request param — the warm browser runs in one mode for its lifetime.</p>
+
+<hr>
+
+<h2>Important constraint: one consumer at a time</h2>
+<p>The MCP server and the HTTP server both lock the <strong>same</strong> <code>browser-data/</code> Chrome profile. Run <strong>only one at a time</strong>. For an MCP-capable agent, that means run just the MCP server — you do <strong>not</strong> also need <code>npm start</code>.</p>
+<p>Re-running <code>npm run login</code> also needs the profile, so stop the running server first if a session refresh is required.</p>
+
+<h2>Performance</h2>
+<ul>
+  <li><strong>First call</strong> cold-starts Chrome (~4s).</li>
+  <li><strong>Later calls</strong> reuse the warm browser and just reload the timeline (~2s).</li>
+  <li>After <strong>30 minutes idle</strong>, Chrome shuts down; the next call cold-starts again.</li>
+</ul>
+
+<hr>
+
+<h2 id="response-shape">Response shape (per tweet)</h2>
+<pre><code>{
+  "id": "1234567890",
+  "url": "https://x.com/user/status/1234567890",
+  "author": { "handle": "@user", "displayName": "User", "avatarUrl": "...", "verified": true },
+  "text": "the tweet text\nwith newlines",
+  "timestamp": "2026-05-25T13:09:01.000Z",
+  "metrics": { "replies": 96, "retweets": 59, "likes": 1190, "views": 245211, "bookmarks": 177 },
+  "media": [{ "type": "photo", "url": "https://pbs.twimg.com/media/..." }],
+  "isPromoted": false,
+  "isRetweet": false,
+  "retweetedBy": null,
+  "quotedTweet": { "author": { "handle": "@other", "displayName": "Other" }, "text": "...", "url": "..." },
+  "lang": "en"
+}</code></pre>
+<p>Counts like <code>1.2K</code> / <code>3.4M</code> are parsed to integers. Promoted tweets have no timestamp; <code>filterAds=true</code> removes them.</p>
+
+<hr>
+
+<h2>Troubleshooting</h2>
+<table>
+  <thead>
+    <tr><th>Symptom</th><th>Cause / fix</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>Not logged in</code> error (MCP) / HTTP <code>401</code></td><td>No valid session. A human runs <code>npm run login</code>. Stop the running server first (profile lock).</td></tr>
+    <tr><td>HTTP <code>429</code> "Scrape in progress"</td><td>A scrape is already running; retry shortly. (The MCP server serializes calls automatically, so it won't 429.)</td></tr>
+    <tr><td>MCP client shows protocol/parse errors</td><td>The server command was wrapped in <code>npm run</code>; call <code>node /abs/path/src/mcp.js</code> directly instead.</td></tr>
+    <tr><td>Chrome not found at launch</td><td><code>npx playwright install chrome</code>.</td></tr>
+    <tr><td>Profile lock / can't launch</td><td>Another consumer (HTTP server or a second MCP instance) holds <code>browser-data/</code>. Run only one.</td></tr>
+  </tbody>
+</table>
+
+</body>
+</html>
