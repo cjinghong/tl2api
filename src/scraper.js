@@ -1,81 +1,53 @@
-import { chromium } from 'playwright';
-import path from 'path';
-import { fileURLToPath } from 'url';
+// Scrolls and extracts tweets from a page already on x.com/home. The browser
+// lifecycle (launch, login check, reuse, teardown) lives in browser.js.
+export async function scrapeTimeline({ page, count = 20, filterAds = true } = {}) {
+  const collected = new Map();
+  let scrolls = 0;
+  const MAX_SCROLLS = 30;
+  const SCROLL_WAIT_MS = 1500;
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const USER_DATA_DIR = path.resolve(__dirname, '..', 'browser-data');
-
-export async function scrapeTimeline({ count = 20, filterAds = true, headless = true } = {}) {
-  const context = await chromium.launchPersistentContext(USER_DATA_DIR, {
-    headless,
-    channel: 'chrome',
-    viewport: { width: 1280, height: 900 },
-    args: ['--disable-blink-features=AutomationControlled'],
-    ignoreDefaultArgs: ['--enable-automation'],
-  });
-
-  await context.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-  });
-
-  try {
-    const page = context.pages()[0] || (await context.newPage());
-    await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 30000 });
-
-    const isLoggedOut = async () => {
-      const url = page.url();
-      if (url.includes('login') || url.includes('/i/flow/login') || url.includes('/i/flow/signup')) return true;
-      if (!url.includes('/home')) return true;
-      const hasLoginCta = await page.evaluate(() => {
-        const txt = document.body ? document.body.innerText || '' : '';
-        return /Sign in to X/i.test(txt) || /New to X\?/i.test(txt) || !!document.querySelector('a[href="/login"], a[data-testid="loginButton"]');
-      }).catch(() => false);
-      return hasLoginCta;
-    };
-
-    try {
-      await page.waitForSelector('article[data-testid="tweet"]', { timeout: 15000 });
-    } catch (err) {
-      if (await isLoggedOut()) {
-        throw new Error('Not logged in. Run: npm run login');
-      }
-      throw err;
+  const targetReached = () => {
+    if (filterAds) {
+      let n = 0;
+      for (const t of collected.values()) if (!t.isPromoted) n++;
+      return n >= count;
     }
+    return collected.size >= count;
+  };
 
-    if (await isLoggedOut()) {
-      throw new Error('Not logged in. Run: npm run login');
+  const lastTweetHref = () =>
+    page.evaluate(() => {
+      const arts = document.querySelectorAll('article[data-testid="tweet"]');
+      const last = arts[arts.length - 1];
+      if (!last) return null;
+      const a = last.querySelector('a[href*="/status/"]');
+      return a ? a.getAttribute('href') : null;
+    });
+
+  while (!targetReached() && scrolls < MAX_SCROLLS) {
+    const batch = await page.evaluate(extractAllTweets);
+    for (const t of batch) {
+      if (t && t.id && !collected.has(t.id)) collected.set(t.id, t);
     }
+    if (targetReached()) break;
 
-    const collected = new Map();
-    let scrolls = 0;
-    const MAX_SCROLLS = 30;
+    const before = await lastTweetHref();
+    await page.evaluate(() => window.scrollBy(0, window.innerHeight * 0.9));
 
-    const targetReached = () => {
-      if (filterAds) {
-        let n = 0;
-        for (const t of collected.values()) if (!t.isPromoted) n++;
-        return n >= count;
-      }
-      return collected.size >= count;
-    };
-
-    while (!targetReached() && scrolls < MAX_SCROLLS) {
-      const batch = await page.evaluate(extractAllTweets);
-      for (const t of batch) {
-        if (t && t.id && !collected.has(t.id)) collected.set(t.id, t);
-      }
-      if (targetReached()) break;
-      await page.evaluate(() => window.scrollBy(0, window.innerHeight * 0.9));
-      await page.waitForTimeout(1500);
-      scrolls++;
+    // Wait until fresh tweets appear (the last article changes) instead of a
+    // fixed sleep, capped at SCROLL_WAIT_MS so end-of-feed still terminates.
+    const deadline = Date.now() + SCROLL_WAIT_MS;
+    while (Date.now() < deadline) {
+      await page.waitForTimeout(150);
+      const now = await lastTweetHref();
+      if (now && now !== before) break;
     }
-
-    let results = Array.from(collected.values());
-    if (filterAds) results = results.filter((t) => !t.isPromoted);
-    return results.slice(0, count);
-  } finally {
-    await context.close();
+    scrolls++;
   }
+
+  let results = Array.from(collected.values());
+  if (filterAds) results = results.filter((t) => !t.isPromoted);
+  return results.slice(0, count);
 }
 
 function extractAllTweets() {

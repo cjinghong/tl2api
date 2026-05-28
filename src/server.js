@@ -1,5 +1,6 @@
 import express from 'express';
 import { scrapeTimeline } from './scraper.js';
+import { getFreshTimeline, armIdleTimer, shutdown } from './browser.js';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -27,7 +28,7 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
   res.json({
     endpoints: ['GET /tweets', 'GET /health', 'GET /'],
-    example: `http://localhost:${port}/tweets?count=20&filterAds=true&headless=true`,
+    example: `http://localhost:${port}/tweets?count=20&filterAds=true`,
   });
 });
 
@@ -50,17 +51,14 @@ app.get('/tweets', async (req, res) => {
   if (filterAds === null) {
     return res.status(400).json({ error: 'filterAds must be boolean' });
   }
-  const headless = parseBool(req.query.headless, true);
-  if (headless === null) {
-    return res.status(400).json({ error: 'headless must be boolean' });
-  }
 
   if (scraping) {
     return res.status(429).json({ error: 'Scrape in progress, try again shortly' });
   }
   scraping = true;
   try {
-    const tweets = await scrapeTimeline({ count, filterAds, headless });
+    const page = await getFreshTimeline();
+    const tweets = await scrapeTimeline({ page, count, filterAds });
     res.json({ count: tweets.length, requestedCount: count, filterAds, tweets });
   } catch (err) {
     const msg = err && err.message ? err.message : String(err);
@@ -70,10 +68,20 @@ app.get('/tweets', async (req, res) => {
     res.status(500).json({ error: msg });
   } finally {
     scraping = false;
+    armIdleTimer();
   }
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`tl2api listening on http://localhost:${port}`);
   console.log(`Try: http://localhost:${port}/tweets?count=20`);
 });
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, async () => {
+    console.log(`\n${sig} received, shutting down`);
+    server.close();
+    await shutdown();
+    process.exit(0);
+  });
+}

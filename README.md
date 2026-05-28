@@ -7,6 +7,7 @@ Local API that retrieves your X (Twitter) home timeline **without the X API**. I
 - **Playwright + real Chrome** loads your logged-in X session from a persistent profile (`browser-data/`).
 - A one-time `npm run login` saves the session; after that the scraper reuses it headlessly.
 - `GET /tweets` scrolls `x.com/home`, extracts each tweet from the DOM, and returns structured JSON.
+- **The browser stays warm** between requests: the first call cold-starts Chrome, later calls just reload the timeline (much faster). After 30 minutes idle, Chrome shuts down and the next call cold-starts again.
 
 ## Setup
 
@@ -19,17 +20,20 @@ npm start                       # serves on http://localhost:3000
 
 > Log in directly with username/email + password. Avoid "Sign in with Google" — Google blocks automated browsers.
 
+To watch the browser work (debugging), start headful: `HEADLESS=false npm start`.
+
 ## Usage
 
 ```
 GET http://localhost:3000/tweets
 ```
 
-| Param       | Type    | Default | Notes                                  |
-|-------------|---------|---------|----------------------------------------|
-| `count`     | int     | `20`    | 1–200. Number of tweets to return.     |
-| `filterAds` | boolean | `true`  | Strip promoted tweets / ads.           |
-| `headless`  | boolean | `true`  | Set `false` to watch the browser work. |
+| Param       | Type    | Default | Notes                              |
+|-------------|---------|---------|------------------------------------|
+| `count`     | int     | `20`    | 1–200. Number of tweets to return. |
+| `filterAds` | boolean | `true`  | Strip promoted tweets / ads.       |
+
+Headless mode is set once at startup via the `HEADLESS` env var (default `true`), not per request — the warm browser runs in a single mode for its lifetime.
 
 Examples:
 
